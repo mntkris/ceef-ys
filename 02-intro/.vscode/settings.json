@@ -1,0 +1,5 @@
+{
+    "plpgsqlLanguageServer.database": "ceef-02-intro",
+    "plpgsqlLanguageServer.port": 55151,
+    "plpgsqlLanguageServer.user": "ceef"
+}
