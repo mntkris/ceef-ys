@@ -44,4 +44,5 @@ echo "$P/bin/pg_ctl stop -D $P/data --wait" > $P/stop && chmod +x $P/stop &&
 echo "$P/bin/pg_ctl status -D $P/data" > $P/status && chmod +x $P/status &&
 echo "$P/bin/pg_ctl reload -D $P/data" > $P/reload && chmod +x $P/reload &&
 $P/start &&
+createdb $USER &&
 $P/bin/psql --list
