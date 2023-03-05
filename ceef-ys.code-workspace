@@ -2,6 +2,9 @@
     "folders": [
         {
             "path": "01-tools"
+        },
+        {
+            "path": "02-intro"
         }
     ]
 }
