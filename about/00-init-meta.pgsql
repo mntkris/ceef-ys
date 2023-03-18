@@ -27,6 +27,10 @@ BEGIN
       array_to_string(items, $$','$$));
   END IF;
 
+  IF currentitems = items THEN
+    RETURN NULL;
+  END IF;
+
   IF cardinality(currentitems) = cardinality(items) AND currentitems != items THEN
     --warn its only rename not reposition if some pairs of item labels are swapped
     RETURN string_agg(format('ALTER TYPE %I.%I RENAME VALUE %L TO %L;', schema, name, currentitem, item), E'\n')
