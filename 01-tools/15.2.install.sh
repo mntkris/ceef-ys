@@ -15,7 +15,7 @@ cd $P/src &&
   --enable-nls='pl'  --with-perl --with-python --with-tcl \
   --with-icu --with-llvm --with-lz4 --with-zstd --with-openssl \
   --with-ldap --with-pam --with-systemd --with-ossp-uuid \
-  --with-libxml --with-libxslt --with-pgport=55151 &&
+  --with-libxml --with-libxslt --with-pgport=55152 &&
 make world &&
 make check &&
 make install-world &&
