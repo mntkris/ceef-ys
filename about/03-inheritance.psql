@@ -1,0 +1,33 @@
+-- TODO move to 01-O
+
+\connect ceef_about
+\set AUTOCOMMIT
+
+\set ECHO queries
+
+DROP SCHEMA IF EXISTS inheritance CASCADE;
+CREATE SCHEMA inheritance;
+SET search_path TO inheritance;
+
+\echo 'see https://www.postgresql.org/docs/15/ddl-inherit.html#DDL-INHERIT-CAVEATS'
+
+CREATE TYPE ResourceType AS ENUM('CUSTOMER', 'PRODUCT', 'SERVICE', 'INVENTORY');
+CREATE DOMAIN ResourceSymbol AS VARCHAR(50);
+CREATE DOMAIN ResourceName AS VARCHAR(500);
+
+CREATE TABLE Resource (
+  type ResourceType NOT NULL,
+  symbol ResourceSymbol NOT NULL,
+  name ResourceName,
+  PRIMARY KEY (type, symbol)
+);
+
+CREATE DOMAIN VatRate INT;
+
+CREATE TABLE SellableResource (
+
+) INHERITS(Resource);
+
+CREATE TABLE Commodity (
+
+) INHERITS(SellableResource);

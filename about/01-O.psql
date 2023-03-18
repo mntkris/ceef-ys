@@ -1,0 +1,75 @@
+\set schema o
+\ir 00-init.psql
+
+\echo '\n===== ENUM TYPES ======\n'
+
+CREATE TYPE WDayOfWeek AS ENUM('tue', 'thu');
+\dT+ WDayOfWeek
+
+ALTER TYPE WDayOfWeek ADD VALUE 'wed' AFTER 'tue';
+\dT+ WDayOfWeek
+
+ALTER TYPE WDayOfWeek ADD VALUE 'wed' BEFORE 'thu'; 
+ALTER TYPE WDayOfWeek ADD VALUE IF NOT EXISTS 'wed' BEFORE 'thu'; 
+\dT+ WDayOfWeek
+
+ALTER TYPE WDayOfWeek ADD VALUE 'mon' BEFORE 'tue';
+ALTER TYPE WDayOfWeek ADD VALUE 'fri' BEFORE 'thu';  --intentionally
+\dT+ WDayOfWeek
+
+\echo 'INFO: no DROP VALUE implemented for now\n'
+
+CREATE TEMPORARY TABLE wdowtest(wdow WDayOfWeek, txtwdow TEXT);
+INSERT INTO wdowtest(wdow, txtwdow) 
+SELECT d, d::TEXT 
+FROM unnest(ARRAY['fri', 'tue', 'thu', 'mon', 'wed']::WDayOfWeek[]) AS d;
+
+\echo '\nNOTE: order according to position in enum definition\n'
+SELECT * FROM wdowtest ORDER BY wdow DESC;
+SELECT ARRAY_AGG(wdow ORDER BY wdow) wdays,
+  enum_range(NULL:::schema.WDayOfWeek) enum_tange
+FROM wdowtest;
+
+\echo 'trying to swap thu and fri\n'
+
+BEGIN;
+ALTER TYPE WDayOfWeek RENAME VALUE 'fri' TO 'xfri';
+ALTER TYPE WDayOfWeek RENAME VALUE 'thu' TO 'fri';
+ALTER TYPE WDayOfWeek RENAME VALUE 'xfri' TO 'thu';
+\dT+ WDayOfWeek
+
+\echo '\nNOTE: RENAME VALUE changes only <label> not <position> obviously\n'
+
+SELECT * FROM wdowtest ORDER BY wdow;
+ROLLBACK;
+\dT+ WDayOfWeek
+
+\echo '\nalter column type must be used to <reposition> enum items\n'
+
+ALTER TYPE WDayOfWeek RENAME TO XWDayOfWeekX;
+\d wdowtest
+CREATE TYPE WDayOfWeek AS ENUM ('mon', 'tue', 'wed', 'thu', 'fri');
+ALTER TABLE wdowtest ALTER COLUMN wdow TYPE WDayOfWeek USING wdow::TEXT::WDayOfWeek;
+DROP TYPE XWDayOfWeekX;
+\d wdowtest
+SELECT * FROM wdowtest ORDER BY wdow;
+
+\echo '\nuse of idempotent meta.define_enum\n'
+
+SELECT meta.define_enum(:'schema', 'Digit', '->',     'X',        'Y',            '8'    )
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->',     '1',        '4',            '8'    )
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->',     '1','2',    '4',    '6',    '8'    )
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->',     '2','1','3','4',    '6',    '8'    ) --error
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->',     '1','2','3','4',    '6',    '8'    )
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->',     '1','2','3','4',    '6','7','8','9')
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->', '0','1','2','3','4','5','6','7','8','9')
+\gexec
+SELECT meta.define_enum(:'schema', 'Digit', '->', '0','1','2','3','4','5','6','7','8','9')
+\gexec
+\dT+ Digit
