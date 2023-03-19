@@ -1,0 +1,48 @@
+\connect ceef_about
+\set AUTOCOMMIT ON
+
+ALTER DATABASE ceef_about SET default_transaction_isolation TO SERIALIZABLE;
+
+/*
+TODO - FOR BROWSE 
+LISTEN NOTIFY
+*/
+
+DROP SCHEMA IF EXISTS async CASCADE;
+CREATE SCHEMA async;
+SET search_path TO async;
+
+CREATE DOMAIN Message AS TEXT;
+
+CREATE TABLE Queue (
+  id BIGSERIAL PRIMARY KEY,
+  processed BOOL NOT NULL DEFAULT FALSE,
+  message Message
+);
+CREATE INDEX ON Queue(id) WHERE (NOT processed);
+
+CREATE TYPE OpType AS ENUM('offer', 'take');
+CREATE TABLE queue_log (
+  occured TIMESTAMP NOT NULL,
+  optype OpType NOT NULL,
+  message Message
+);
+
+CREATE PROCEDURE queue_offer(msg Message) 
+LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+  INSERT INTO queue(message) VALUES(msg);
+  NOTIFY queue;
+END;
+$BODY$;
+
+CREATE PROCEDURE queue_take()
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  r Queue;
+BEGIN
+  --FOR r IN  
+END;
+$BODY$;
