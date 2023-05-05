@@ -9,5 +9,10 @@
         {
             "path": "about"
         }
-    ]
+    ],
+    "settings": {
+        "plpgsqlLanguageServer.definitionFiles": [
+            "**/*.pgsql"
+        ]
+    }
 }

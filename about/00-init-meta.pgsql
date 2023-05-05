@@ -3,9 +3,52 @@ CREATE SCHEMA meta;
 
 CREATE TYPE meta.Sep AS ENUM('->');
 
+CREATE TYPE meta.DefineReturn AS (
+  ddl text, code text
+);
+
+CREATE OR REPLACE FUNCTION meta.DefineReturn(
+  ddl text, code text DEFAULT ''::text
+) RETURNS meta.DefineReturn AS $BODY$
+  SELECT ddl, code;
+$BODY$ LANGUAGE SQL IMMUTABLE;
+
+-- ==================================================
+
+CREATE OR REPLACE FUNCTION meta.define_scalar(
+  schema text, name text, systemtype text
+) RETURNS text AS
+$BODY$
+#variable_conflict use_variable
+BEGIN
+  schema = coalesce(lower(schema), CURRENT_SCHEMA);
+  name = lower(name);
+
+  RETURN format('CREATE DOMAIN %I.%I AS %s;', schema, name, systemtype);
+END;
+$BODY$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION meta.define_scalar(
+  name text, systemtype text
+) RETURNS text AS
+$BODY$
+BEGIN
+  RETURN meta.define_scalar(NULL, name, systemtype);
+END;
+$BODY$ LANGUAGE plpgsql;
+
+-- ==================================================
+
+CREATE VIEW meta.EnumAttrsV AS
+  SELECT n.nspname schema, t.typname name, 
+    e.enumlabel label, e.enumsortorder position
+  FROM pg_catalog.pg_type t 
+    JOIN pg_catalog.pg_enum e on t.oid = e.enumtypid  
+    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace;
+
 CREATE OR REPLACE FUNCTION meta.define_enum(
   schema text, name text, sep meta.Sep, VARIADIC items text[]
-) RETURNS text AS 
+) RETURNS meta.DefineReturn AS 
 $BODY$
 #variable_conflict use_variable
 DECLARE
@@ -15,16 +58,13 @@ BEGIN
   schema = coalesce(lower(schema), CURRENT_SCHEMA);
   name = lower(name);
 
-  --https://stackoverflow.com/questions/9540681/list-postgres-enum-type
-  SELECT array_agg(e.enumlabel ORDER BY e.enumsortorder) INTO currentitems
-  FROM pg_type t 
-    JOIN pg_enum e on t.oid = e.enumtypid  
-    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-  WHERE n.nspname = schema AND t.typname = name;
+  SELECT array_agg(ea.label ORDER BY ea.position) INTO currentitems
+  FROM meta.EnumAttrsV ea
+  WHERE (ea.schema, ea.name) = (schema, name);
+
   IF currentitems IS NULL THEN
-    RETURN format(
-      $$CREATE TYPE %I.%I AS ENUM ('%s');$$, schema, name,
-      array_to_string(items, $$','$$));
+    RETURN meta.DefineReturn(
+      format($$CREATE TYPE %I.%I AS ENUM ('%s');$$, schema, name, array_to_string(items, $$','$$)));
   END IF;
 
   IF currentitems = items THEN
@@ -33,7 +73,8 @@ BEGIN
 
   IF cardinality(currentitems) = cardinality(items) AND currentitems != items THEN
     --warn its only rename not reposition if some pairs of item labels are swapped
-    RETURN string_agg(format('ALTER TYPE %I.%I RENAME VALUE %L TO %L;', schema, name, currentitem, item), E'\n')
+    RETURN meta.DefineReturn(
+      string_agg(format('ALTER TYPE %I.%I RENAME VALUE %L TO %L;', schema, name, currentitem, item), E'\n'))
     FROM UNNEST(currentitems, items) x(currentitem, item)
     WHERE currentitem != item;
   END IF;
@@ -68,32 +109,34 @@ BEGIN
       format('ALTER TYPE %I.%I ADD VALUE %L;', schema, name, nitem)
     END, E'\n' ORDER BY ord DESC) INTO ret
   FROM r WHERE oitem IS NULL;
-	RETURN ret;
+
+	RETURN meta.Definereturn(ret);
 	
 END;
 $BODY$ LANGUAGE plpgsql;
 
-/*
-DROP TYPE IF EXISTS testenum;
-DO $$ 
-DECLARE 
-  cmd TEXT = '';
+-- ==================================================
+
+CREATE VIEW meta.CompositeAttrsV AS                       
+  SELECT tn.nspname schema, t.typname type, an.nspname aschema, at.typname atype, a.attname aname, 
+    an.nspname IN ('pg_catalog', 'information_schema') asystemtype
+  FROM pg_catalog.pg_type t
+  JOIN pg_catalog.pg_namespace tn ON t.typnamespace = tn.oid
+  JOIN pg_catalog.pg_class c ON t.typrelid = c.oid AND c.relkind = 'c'
+  JOIN pg_catalog.pg_attribute a ON t.typrelid = a.attrelid AND a.attnum > 0 AND NOT a.attisdropped
+  JOIN pg_catalog.pg_type at ON a.atttypid = at.oid
+  JOIN pg_catalog.pg_namespace an ON at.typnamespace = an.oid;
+ 
+CREATE TYPE meta.CompositeAttr AS (
+  name text, schema text, type text
+);
+
+CREATE FUNCTION meta.define_composite(
+  schema text, name text, sep meta.Sep, VARIADIC attrs meta.CompositeAttr[]
+) RETURNS meta.DefineReturn AS 
+$BODY$
+#variable_conflict use_variable
+DECLARE
 BEGIN
---                                             '0','1','2','3','4','5','6','7','8','9'
-cmd = meta.define_enum(NULL, 'testenum', '->',     'X',        'Y',            '8'    ); EXECUTE cmd; RAISE info '%', cmd;
-cmd = meta.define_enum(NULL, 'testenum', '->',     '1',        '4',            '8'    ); EXECUTE cmd; RAISE info '%', cmd;
-cmd = meta.define_enum(NULL, 'testenum', '->',     '1','2',    '4',    '6',    '8'    ); EXECUTE cmd; RAISE info '%', cmd;
---cmd = meta.define_enum(null, 'testenum', '->',   '2','1','3','4',    '6',    '8'    ); EXECUTE cmd; RAISE info '%', cmd;  -- error
-cmd = meta.define_enum(NULL, 'testenum', '->',     '1','2','3','4',    '6',    '8'    ); EXECUTE cmd; RAISE info '%', cmd;
-cmd = meta.define_enum(NULL, 'testenum', '->',     '1','2','3','4',    '6','7','8','9'); EXECUTE cmd; RAISE info '%', cmd;
-cmd = meta.define_enum(NULL, 'testenum', '->',     '1','2','3','4','5','6','7','8','9'); EXECUTE cmd; RAISE info '%', cmd;
-END; $$;
-SELECT n.nspname as enum_schema, t.typname as enum_name, 
-  --e.enumsortorder as enum_sortorder, e.enumlabel as enum_value
-  ARRAY_AGG(e.enumlabel ORDER BY e.enumsortorder)
-FROM pg_type t 
-  JOIN pg_enum e on t.oid = e.enumtypid  
-  JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-WHERE n.nspname = 'o' AND t.typname = 'testenum'
-GROUP BY n.nspname, t.typname;
-*/
+END;
+$BODY$ LANGUAGE plpgsql;
