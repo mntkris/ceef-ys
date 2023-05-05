@@ -3,6 +3,8 @@
 \connect ceef_about
 \set AUTOCOMMIT
 
+\ir 00-init-meta.pgsql
+
 \echo '\n===== INIT =====\n'
 DROP SCHEMA IF EXISTS :schema CASCADE;
 CREATE SCHEMA :schema;
@@ -13,5 +15,6 @@ SET search_path TO :schema;
 memo
 - function calls variadic overloading  defaults
 - big letters in identidiers with and without "
+- convention tables and types in CamelCase, no need "" in any case
 
 */
